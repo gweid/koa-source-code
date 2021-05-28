@@ -505,6 +505,37 @@ app.use(middleWare2)
 
 
 
+**中间件的执行机制：多个中间件会形成一个`先进后出`的栈结构，当前中间件掌握下一个中间件的执行权。例如：**
+
+```js
+const middleWare1 = (ctx, next) => {
+  console.log('start：中间件--1')
+  ctx.body = 'hello'
+  next()
+  console.log('end：中间件--1')
+}
+
+const middleWare2 = (ctx, next) => {
+  console.log('start：中间件--2')
+  ctx.body = 'hi,koa'
+  console.log('end：中间件--2')
+}
+
+app.use(middleWare1)
+app.use(middleWare2)
+```
+
+输出的顺序是：
+
+```js
+start：中间件--1
+start：中间件--2
+end：中间件--2
+end：中间件--1
+```
+
+
+
 ### 6.4、handleResponse
 
 > koa\lib\application.js
