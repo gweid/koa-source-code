@@ -195,7 +195,7 @@ if (util.inspect.custom) {
 /**
  * Response delegation.
  */
-
+// 使用 delegate 把 proto.response 下面的方法和属性都挂载到 proto 上
 delegate(proto, 'response')
   .method('attachment')
   .method('redirect')
