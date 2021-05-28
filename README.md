@@ -584,3 +584,72 @@ function respond(ctx) {
 
 
 
+## 7、为什么可以通过 ctx.xxx 快捷访问
+
+比如，在返回响应数据的时候，为什么可以通过 `ctx.body = 'xxx'` 的方式，不需要 `ctx.response.body` 这种方式也可以呢？
+
+> koa\lib\context.js
+
+```js
+const delegate = require('delegates');
+
+const proto = module.exports = {/.../}
+
+// 使用 delegate 把 proto.response 里指定的方法和属性挂载到 proto 上
+delegate(proto, 'response')
+  .method('attachment')
+  .method('redirect')
+  .method('remove')
+  .method('vary')
+  .method('has')
+  .method('set')
+  .method('append')
+  .method('flushHeaders')
+  .access('status')
+  .access('message')
+  .access('body')
+  .access('length')
+  .access('type')
+  .access('lastModified')
+  .access('etag')
+  .getter('headerSent')
+  .getter('writable');
+
+
+// 使用 delegate 把 proto.request 里指定的方法和属性挂载到 proto 上
+delegate(proto, 'request')
+  .method('acceptsLanguages')
+  .method('acceptsEncodings')
+  .method('acceptsCharsets')
+  .method('accepts')
+  .method('get')
+  .method('is')
+  .access('querystring')
+  .access('idempotent')
+  .access('socket')
+  .access('search')
+  .access('method')
+  .access('query')
+  .access('path')
+  .access('url')
+  .access('accept')
+  .getter('origin')
+  .getter('href')
+  .getter('subdomains')
+  .getter('protocol')
+  .getter('host')
+  .getter('hostname')
+  .getter('URL')
+  .getter('header')
+  .getter('headers')
+  .getter('secure')
+  .getter('stale')
+  .getter('fresh')
+  .getter('ips')
+  .getter('ip');
+```
+
+proto 就是 context，通过 `module.exports` 导出，`applaction.js` 中根据到此的 proto 创建 context。
+
+可以看出，主要就是使用了第三方库 `delegate` 的能力，把 `context.response`、 `context.request` 里指定的方法和属性挂载到 context 上。
+
