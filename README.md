@@ -485,7 +485,7 @@ function compose (middleware) {
 - `.then(handleResponse)`：通过 handleResponse 处理响应结果
 - `.catch(onerror)`：通过 onerror 处理错误
 
-因为是所有中间件执行完之后才处理结果，所以如下代码：
+因为是所有中间件执行完之后才通过 `promise.then` 处理结果，所以如下代码：
 
 ```js
 const middleWare1 = (ctx, next) => {
@@ -501,7 +501,7 @@ app.use(middleWare1)
 app.use(middleWare2)
 ```
 
-得到的响应结果是 'hi,koa'，这与 express 有所不同。
+得到的响应结果是 'hi,koa'，这与 express 有所不同，express 是一旦遇到 `res.end` 会直接返回响应结果。
 
 
 
@@ -509,29 +509,35 @@ app.use(middleWare2)
 
 ```js
 const middleWare1 = (ctx, next) => {
-  console.log('start：中间件--1')
-  ctx.body = 'hello'
+  console.log('start: middle--1')
   next()
-  console.log('end：中间件--1')
+  console.log('end: middle--1')
 }
 
 const middleWare2 = (ctx, next) => {
-  console.log('start：中间件--2')
-  ctx.body = 'hi,koa'
-  console.log('end：中间件--2')
+  console.log('start: middle--2')
+  next()
+  console.log('end: middle--2')
 }
 
-app.use(middleWare1)
-app.use(middleWare2)
+const middleWare3 = (ctx, next) => {
+  console.log('start: middle--3')
+}
+
+app
+  .use(middleWare1)
+  .use(middleWare2)
+  .use(middleWare3)
 ```
 
 输出的顺序是：
 
 ```js
-start：中间件--1
-start：中间件--2
-end：中间件--2
-end：中间件--1
+start: 中间件--1
+start: 中间件--2
+start: 中间件--3
+end: 中间件--2
+end: 中间件--1
 ```
 
 
@@ -613,9 +619,143 @@ function respond(ctx) {
 }
 ```
 
+handleResponse 中使用 respond 对响应数据进行处理
 
 
-## 7、为什么可以通过 ctx.xxx 快捷访问
+
+## 7、洋葱模型
+
+![](/imgs/img2.png)
+
+这是一张经典的洋葱模型图，这里的每一层洋葱都可以认为是一个 koa 中间件，请求被从最外层的到最内层的中间件逐个处理，响应却是最内层先开始响应。
+
+
+
+**例子1：同步处理**
+
+```js
+const middleWare1 = async (ctx, next) => {
+  ctx.msg = 'aa'
+  next()
+  ctx.body = ctx.msg
+}
+
+const middleWare2 = async (ctx, next) => {
+  ctx.msg += 'bb'
+  next()
+  console.log('end: 中间件--2')
+}
+
+const middleWare3 = async (ctx, next) => {
+  ctx.msg = 'aa'
+}
+
+app
+  .use(middleWare1)
+  .use(middleWare2)
+  .use(middleWare3)
+```
+
+这种拿到的响应结果是 aabbcc，具体流程：
+
+![](/imgs/img3.png)
+
+通过上面的源码分析知道，在 koa 的中间件中，遇到 next，会马上拿出下一个中间件出来执行，当执行玩所有中间件之后，才会去处理响应结果，所以最后响应的是 aabbcc
+
+
+
+**例子2：异步处理**
+
+```js
+const middleWare1 = (ctx, next) => {
+  ctx.msg = 'aa'
+  next()
+  ctx.body = ctx.msg
+}
+
+const middleWare2 = (ctx, next) => {
+  ctx.msg += 'bb'
+  next()
+  console.log('end: 中间件--2')
+}
+
+const middleWare3 = (ctx, next) => {
+  new Promise((resolve, reject) => {
+    resolve()
+  }).then(res => {
+    ctx.msg += 'cc'
+  })
+}
+```
+
+这种的拿到的响应结果是：aabb。为什么呢？因为是异步的，next 执行到 middleWare3 的时候，并不会管你异步操作，而是直接返回 middleWare2 执行 `ctx.body = ctx.msg`，依次类推到 middleWare1，但是上面的源码分析说过，koa 会等到所有的中间件处理完，才会处理结果，此时 middleWare3  的异步处理还没有执行，那么就会将 middleWare3  的异步处理拿出来执行，但是 middleWare3 中没有继续为 ctx.body 赋值，所以结果返回 aabb
+
+![](/imgs/img4.png)
+
+
+
+那么，有没有办法还是返回 `ctx.body = '中间件1'` 呢？
+
+有两种方法，第一种，就是在 middleWare3 的 then 中返回 ctx.body
+
+```js
+const middleWare1 = (ctx, next) => {
+  ctx.msg = 'aa'
+  next()
+  console.log('end: 中间件--1')
+}
+
+const middleWare2 = (ctx, next) => {
+  ctx.msg += 'bb'
+  next()
+  console.log('end: 中间件--2')
+}
+
+const middleWare3 = (ctx, next) => {
+  new Promise((resolve, reject) => {
+    resolve()
+  }).then(res => {
+    ctx.msg += 'cc'
+    ctx.body = ctx.msg
+  })
+}
+```
+
+
+
+第二种：因为 next 函数本身就是返回的一个 Promise，只需要：包裹一层 `async...await` 即可
+
+```js
+const middleWare1 = async (ctx, next) => {
+  ctx.msg = 'aa'
+  await next()
+  ctx.body = ctx.msg
+}
+
+const middleWare2 = async (ctx, next) => {
+  ctx.msg += 'bb'
+  await next()
+  console.log('end: 中间件--2')
+}
+
+const middleWare3 = async (ctx, next) => {
+  await new Promise((resolve, reject) => {
+    resolve()
+  }).then(res => {
+    ctx.msg += 'cc'
+  })
+}
+```
+
+第二种的好处是，依然可以在 middleWare1 中返回响应结果，而第一种，要想返回 aabbcc，只能在 middleWare3 中的 then 里面返回
+
+
+
+所以，得益于 koa 的 next 函数返回的是 promise，可以很方便地处理一些异步操作。这是与 express 的很大不同。express 的中间调用顺序是同步的，遇到异步的操作，很难自定义响应返回的位置。
+
+
+
+## 8、为什么可以通过 ctx.xxx 快捷访问
 
 比如，在返回响应数据的时候，为什么可以通过 `ctx.body = 'xxx'` 的方式，不需要 `ctx.response.body` 这种方式也可以呢？
 
