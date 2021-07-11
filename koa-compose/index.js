@@ -45,15 +45,16 @@ function compose (middleware) {
         //   1、content：上下文
         //   2、dispatch.bind(null, i + 1)：bind 还是返回 dispatch 函数，接收的参数是 i+1
         //   3、也就是说，在使用的时候通过 next() 调用，实际上就是从中间件数组中取出下一个中间件执行
+        // 上面类比：app.use(async (ctx, next) => {})
         // 执行中间件的结果通过包裹一层 promise 返回，这也是为什么 Koa 中间件可以使用 async...await 的原因
-        // app.use(async (ctx, next) => {})
+        // 而 Promise.resolve 的结果需要在 then 中才能拿到
         return Promise.resolve(fn(context, dispatch.bind(null, i + 1)));
 
         // 实际上相当于：
         // Promise.resolve((function(ctx, next) {
         //   // ... 一堆逻辑
 
-        //   // 如果调用了 next()，又马上把下一个中间件拿出来执行
+        //   // 如果调用了 next()，又马上把下一个中间件拿出来执行，而结果需要在 then 中才能拿到
         //   next()
         // })())
       } catch (err) {

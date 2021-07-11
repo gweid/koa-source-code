@@ -457,15 +457,16 @@ function compose (middleware) {
         //   1、content：上下文
         //   2、dispatch.bind(null, i + 1)：bind 还是返回 dispatch 函数，接收的参数是 i+1
         //   3、也就是说，在使用的时候通过 next() 调用，实际上就是从中间件数组中取出下一个中间件执行
+        // 上面类比：app.use(async (ctx, next) => {})
         // 执行中间件的结果通过包裹一层 promise 返回，这也是为什么 Koa 中间件可以使用 async...await 的原因
-        // app.use(async (ctx, next) => {})
+        // 而 Promise.resolve 的结果需要在 then 中才能拿到
         return Promise.resolve(fn(context, dispatch.bind(null, i + 1)));
 
         // 实际上相当于：
         // Promise.resolve((function(ctx, next) {
         //   // ... 一堆逻辑
 
-        //   // 如果调用了 next()，又马上把下一个中间件拿出来执行
+        //   // 如果调用了 next()，又马上把下一个中间件拿出来执行，而结果需要在 then 中才能拿到
         //   next()
         // })())
       } catch (err) {
@@ -625,7 +626,7 @@ handleResponse 中使用 respond 对响应数据进行处理
 
 ## 7、洋葱模型
 
-![](/imgs/img2.png)
+ ![](/imgs/img2.png)
 
 这是一张经典的洋葱模型图，这里的每一层洋葱都可以认为是一个 koa 中间件，请求被从最外层的到最内层的中间件逐个处理，响应却是最内层先开始响应。
 
@@ -647,7 +648,7 @@ const middleWare2 = async (ctx, next) => {
 }
 
 const middleWare3 = async (ctx, next) => {
-  ctx.msg = 'aa'
+  ctx.msg += 'cc'
 }
 
 app
@@ -658,7 +659,7 @@ app
 
 这种拿到的响应结果是 aabbcc，具体流程：
 
-![](/imgs/img3.png)
+ <img src="/imgs/img3.png" style="zoom:50%;" />
 
 通过上面的源码分析知道，在 koa 的中间件中，遇到 next，会马上拿出下一个中间件出来执行，当执行玩所有中间件之后，才会去处理响应结果，所以最后响应的是 aabbcc
 
@@ -690,7 +691,7 @@ const middleWare3 = (ctx, next) => {
 
 这种的拿到的响应结果是：aabb。为什么呢？因为是异步的，next 执行到 middleWare3 的时候，并不会管你异步操作，而是直接返回 middleWare2 执行 `ctx.body = ctx.msg`，依次类推到 middleWare1，但是上面的源码分析说过，koa 会等到所有的中间件处理完，才会处理结果，此时 middleWare3  的异步处理还没有执行，那么就会将 middleWare3  的异步处理拿出来执行，但是 middleWare3 中没有继续为 ctx.body 赋值，所以结果返回 aabb
 
-![](/imgs/img4.png)
+ ![](/imgs/img4.png)
 
 
 

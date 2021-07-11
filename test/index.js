@@ -15,7 +15,7 @@ const middleWare2 = async (ctx, next) => {
 }
 
 const middleWare3 = async (ctx, next) => {
-  ctx.msg = 'aa'
+  ctx.msg += 'cc'
 }
 
 app
